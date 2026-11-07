@@ -35,6 +35,13 @@ const MUSIC_RULES = {
    * A single note after a rest, such as one stroke of the triangle, is no entry of the camera.
    */
   passageSec: 8,
+  /**
+   * A section or solo shot ends when its subject rests this many full bars, and at least
+   * {@link MUSIC_RULES.subjectRestSec}: a rest as long as the rest before an entry. A shorter rest,
+   * after which the subject plays again, keeps the shot.
+   */
+  subjectRestBars: 2,
+  subjectRestSec: 3,
 } as const;
 
 /** The notes of one seat, for the windows of the shots. */
@@ -515,6 +522,52 @@ export function restingIn(music: ScoreMusic, time: number, from: number, to: num
     }
   }
   return seats.toReversed();
+}
+
+/**
+ * Finds the first rest of the subject of a shot (design 5.6): a time from which none of its seats
+ * plays for at least two bars and 3 s. The rule reads past the end of the range, so a subject that
+ * plays again within that time does not rest.
+ *
+ * @param music The music of the score.
+ * @param seats The seats of the subject.
+ * @param from The start of the range, in song seconds. A subject silent at it rests from it.
+ * @param to The end of the range, in song seconds: the latest start of the rest.
+ * @returns The start of the rest, or `null` with no such rest in the range.
+ */
+export function subjectRestIn(
+  music: ScoreMusic,
+  seats: readonly number[],
+  from: number,
+  to: number,
+): number | null {
+  const spans: [number, number][] = [];
+  for (const seat of seats) {
+    const merged = music.seats[seat]?.spans;
+    if (!merged) {
+      continue;
+    }
+    for (let k = 0; k < merged.length; k += 2) {
+      const end = merged[k + 1] ?? 0;
+      if (end > from) {
+        spans.push([merged[k] ?? 0, end]);
+      }
+    }
+  }
+  spans.sort((a, b) => a[0] - b[0]);
+  const restOf = (time: number): number =>
+    Math.max(MUSIC_RULES.subjectRestSec, MUSIC_RULES.subjectRestBars * barLengthAt(music, time));
+  let sounding = from;
+  for (const [start, end] of spans) {
+    if (sounding > to + 1e-9) {
+      return null;
+    }
+    if (start - sounding >= restOf(sounding) - 1e-9) {
+      return sounding;
+    }
+    sounding = Math.max(sounding, end);
+  }
+  return sounding <= to + 1e-9 ? sounding : null;
 }
 
 /**

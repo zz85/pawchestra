@@ -3,7 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { chord, note, programChange, tempo, timeSignature, track } from '../midi/test-smf.ts';
 import { noteOn, noteOff } from '../midi/test-smf.ts';
 import { scoreOf } from '../score/test-score.ts';
-import { barLengthAt, beatLengthAt, entriesIn, musicIn, prepareMusic } from './music.ts';
+import {
+  barLengthAt,
+  beatLengthAt,
+  entriesIn,
+  musicIn,
+  prepareMusic,
+  subjectRestIn,
+} from './music.ts';
 
 /** At 120 BPM in 4/4, a quarter note is 0.5 s and a bar is 2 s. */
 const QUARTER = 480;
@@ -219,5 +226,46 @@ describe('entriesIn (design 5.6)', () => {
       ],
     });
     expect(Array.from(prepareMusic(score).entryStarts)).toEqual([]);
+  });
+});
+
+describe('subjectRestIn (design 5.6)', () => {
+  /** A violin that plays bars 1 and 2, rests the given bars, and plays two bars again. */
+  function violinWithRest(restBars: number) {
+    const bar = QUARTER * 4;
+    const score = scoreOf({
+      tracks: [
+        [tempo(0, 120), timeSignature(0, 4, 4)],
+        track(
+          [programChange(0, 0, 40)],
+          note(0, 0, 60, bar * 2),
+          note(bar * (2 + restBars), 0, 62, bar * (4 + restBars)),
+        ),
+        track([programChange(0, 1, 73)], note(0, 1, 72, bar * 12)),
+      ],
+    });
+    return {
+      music: prepareMusic(score),
+      violin: score.seats.findIndex((s) => s.section === 'violin'),
+      flute: score.seats.findIndex((s) => s.section === 'flute'),
+    };
+  }
+
+  it('finds a rest of two bars at the end of the last note', () => {
+    const { music, violin } = violinWithRest(2);
+    expect(subjectRestIn(music, [violin], 0, 14)).toBeCloseTo(4, 9);
+  });
+
+  it('reads past the rest: a subject that plays again within two bars does not rest', () => {
+    const { music, violin } = violinWithRest(1);
+    // The rest from 4 s to 6 s is one bar. The next rest starts at 10 s, after the end of the
+    // violin part, and lasts to the end of the song.
+    expect(subjectRestIn(music, [violin], 0, 9)).toBeNull();
+    expect(subjectRestIn(music, [violin], 0, 14)).toBeCloseTo(10, 9);
+  });
+
+  it('counts a section as playing while one of its seats plays', () => {
+    const { music, violin, flute } = violinWithRest(2);
+    expect(subjectRestIn(music, [violin, flute], 0, 14)).toBeNull();
   });
 });

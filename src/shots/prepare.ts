@@ -45,7 +45,15 @@ import {
 import type { Motion } from './grammar.ts';
 import { FRAME_MARGINS, SHOT_SIZES, frameHalfHeight } from './shot-size.ts';
 import type { ShotSize } from './shot-size.ts';
-import { barLengthAt, beatLengthAt, entriesIn, musicIn, prepareMusic, restingIn } from './music.ts';
+import {
+  barLengthAt,
+  beatLengthAt,
+  entriesIn,
+  musicIn,
+  prepareMusic,
+  restingIn,
+  subjectRestIn,
+} from './music.ts';
 import type { ScoreMusic, WindowMusic } from './music.ts';
 import {
   SUBJECT_SIZES,
@@ -59,13 +67,7 @@ import {
   sideSubject,
   soloSubject,
 } from './subjects.ts';
-import type {
-  SectionGroup,
-  StageSide,
-  StageSubjects,
-  Subject,
-  SubjectFace,
-} from './subjects.ts';
+import type { SectionGroup, StageSide, StageSubjects, Subject, SubjectFace } from './subjects.ts';
 import type {
   AttemptTrace,
   CameraRefusal,
@@ -130,6 +132,8 @@ export const SHOT_TIMES = {
   roomSec: 9.5,
   /** The choice of a subject reads the music of this window after the cut. */
   choiceWindowSec: 8,
+  /** A section or solo shot whose subject rests ends at most this many bars after the rest starts. */
+  restHoldBars: 1,
   /**
    * The longest time with no wide or high shot, from the end of one to the start of the next.
    * With no limit, K. 315 shows no wide view from 10 s to 183 s.
@@ -2406,7 +2410,13 @@ function bestCut(
  * @param latest The latest end, in song seconds: the longest length of a shot that holds on.
  * @returns The end of the shot, in song seconds.
  */
-function chooseEnd(planner: Planner, start: number, kind: ShotKind, latest = Infinity): number {
+function chooseEnd(
+  planner: Planner,
+  start: number,
+  kind: ShotKind,
+  latest = Infinity,
+  subject: readonly number[] = [],
+): number {
   const t = SHOT_TIMES;
   const { music, lastStart } = planner;
   const wideKind = kind === 'wide' || kind === 'high';
@@ -2418,6 +2428,17 @@ function chooseEnd(planner: Planner, start: number, kind: ShotKind, latest = Inf
     longest = Math.min(longest, planner.lastWideEnd + t.maxWideGapSec);
   }
   const shortest = start + t.minSec;
+  if ((kind === 'solo' || kind === 'section') && subject.length > 0) {
+    // The subject rests: the shot ends in the bar after its last note, so that the camera does
+    // not hold on players that do not play. A short rest before it plays again keeps the shot.
+    const rest = subjectRestIn(music, subject, start, longest);
+    if (rest !== null) {
+      const bar = barLengthAt(music, rest);
+      // At least one bar after the shortest length, which holds a downbeat to cut on.
+      longest = Math.min(longest, Math.max(shortest, rest) + t.restHoldBars * bar);
+      wanted = Math.min(wanted, Math.max(shortest, rest + (t.restHoldBars * bar) / 2));
+    }
+  }
   // The first entry after the shortest length ends the shot: the cut falls in the reach of the
   // entry, when a cut there fits.
   const entry = firstEntryReach(music, shortest, longest);
@@ -2880,7 +2901,10 @@ function* planShotsSteps(
     }
     const { candidate, framing } = chosen;
     const previous = planner.planned.at(-1);
-    const end = Math.min(chooseEnd(planner, cut, candidate.kind), planner.lastStart);
+    const end = Math.min(
+      chooseEnd(planner, cut, candidate.kind, Infinity, candidate.seats),
+      planner.lastStart,
+    );
     addShot(planner, candidate, framing, {
       startSec: cut,
       endSec: end,

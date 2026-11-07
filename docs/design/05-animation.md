@@ -737,6 +737,11 @@ the start after the end makes no cut. The planner reads the music after the cut 
 entries, a tutti, and the lead, because a concert film follows the melody. Then these rules apply,
 in this order (`CHOICE_WEIGHTS`, `SHOT_TIMES`):
 
+A section or solo shot ends when its subject rests (`subjectRestIn()`): where none of its seats
+plays for two full bars and at least 3 s, the cut falls within one bar after the last note, and
+not before the shortest length. The rule reads past the shot, so a shorter rest after which the
+subject plays again keeps the shot.
+
 1. No repeat of the kind and the subject of the previous shot.
 2. No section or solo shot of the group of the previous shot.
 3. Spacing: a wide, high, conductor, or side shot waits some shots since the last one.
