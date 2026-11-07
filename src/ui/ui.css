@@ -1232,6 +1232,21 @@ body.is-building #stage {
   color: var(--text-dim);
 }
 
+/* A menu of the tab "Video" fills the width of the panel, as a segmented control does. */
+.panel-select {
+  width: 100%;
+  min-height: var(--target-compact);
+  padding: 0 8px;
+  font-size: 13px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+}
+
+.video-panel {
+  overflow-y: auto;
+}
+
 /* The "Playback" group shows only on a phone, with four controls of the bar (design 2.8). */
 .playback {
   display: none;

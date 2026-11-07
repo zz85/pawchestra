@@ -125,6 +125,12 @@ page starts in Free mode (`app/camera-mode.ts`).
 - **Cinematic** takes each frame from `cameraAt()`: the shots of 5.6. The first shot starts from
   the default view, so a click on play makes no cut. A drag, a pinch, or a wheel changes to Free
   at once. The change to Cinematic mode closes the drawer (2.3).
+- **Camera menu.** The tab "Video" of the drawer (`ui/video-panel.ts`) has the menu "Camera":
+  the shots of the director, the free camera, or one seat. A seat puts Cinematic mode on the held
+  view of that seat: one section shot of all its players for the whole piece, also before the
+  first play (`ShotPlan.seatViews`, `seatViewPlan()` of `shots/prepare.ts`). The planner makes
+  the view of each seat with the rules of a section shot and no shot before it. Each other change
+  of the camera, such as a drag or C, ends the held view.
 - **Letterbox.** Cinematic mode shows the scene in the largest box of the aspect 21:9
   (`CINEMA_ASPECT`) at the middle of the viewport, as a film. Pure black bars fill the rest: at
   the top and the bottom of a view narrower than 21:9, and at the sides of a wider view. The

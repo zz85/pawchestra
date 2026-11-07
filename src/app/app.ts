@@ -11,12 +11,14 @@ import type { Steps } from '../score/steps.ts';
 import { stageMix } from '../score/stage-mix.ts';
 import type { ChannelMix } from '../score/stage-mix.ts';
 import { cameraAt, createCameraPose } from '../shots/camera-at.ts';
+import { seatViewPlan } from '../shots/prepare.ts';
 import type { CameraPose, ShotPlan } from '../shots/types.ts';
 import { CINEMA_ASPECT } from '../shots/view.ts';
 import type { Score, SectionSize } from '../score/types.ts';
 import { focusKindOf } from '../ui/dom.ts';
 import { nextShadeLevel } from '../ui/title-shade.ts';
 import { Ui } from '../ui/ui.ts';
+import type { CameraChoice } from '../ui/video-panel.ts';
 import { playWithSilentSwitch, warmAudioOutput } from './audio-session.ts';
 import { BackdropProbe } from './backdrop-probe.ts';
 import { DEFAULT_SPEED, DEFAULT_VOLUME, uiShown, volumeGain } from './bar-rules.ts';
@@ -271,6 +273,11 @@ export class App {
   #message: Message | null = null;
   /** Cinematic or Free (design 2.5). The page starts in Free mode. */
   #cameraMode: CameraMode = 'free';
+  /**
+   * The seat whose held view Cinematic mode shows in place of the shots of the director, or
+   * `null` (the camera menu, design 2.5). Each other change of the camera ends it.
+   */
+  #seatView: number | null = null;
   /** The camera of the shot of the last frame, which `cameraAt()` writes. */
   readonly #shotCamera = createCameraPose();
   /** The phone layout of design 2.8, which moves the frame above the sheet. */
@@ -354,6 +361,9 @@ export class App {
         onFrameRate: (frameRate) => {
           this.#frameRate = frameRate;
           this.#applySettings();
+        },
+        onCameraChoice: (choice) => {
+          this.#chooseCamera(choice);
         },
         onRetry: () => {
           this.#message = null;
@@ -569,11 +579,41 @@ export class App {
    * @param event The event.
    */
   #changeCamera(event: CameraEvent): void {
+    if (event !== 'click') {
+      this.#seatView = null;
+    }
     const mode = nextMode(this.#cameraMode, event);
     if (mode === 'cinematic' && this.#cameraMode === 'free') {
       this.#ui.closeDrawer();
     }
     this.#cameraMode = mode;
+  }
+
+  /**
+   * Puts the camera on a choice of the camera menu (design 2.5): the shots of the director, the
+   * free camera, or the held view of one seat, which shows in Cinematic mode.
+   *
+   * @param choice The choice.
+   */
+  #chooseCamera(choice: CameraChoice): void {
+    if (choice.kind === 'free') {
+      this.#changeCamera('reset');
+      return;
+    }
+    if (this.#cameraMode === 'free') {
+      this.#changeCamera('toggle');
+    }
+    this.#seatView = choice.kind === 'seat' ? choice.seat : null;
+  }
+
+  /** The choice of the camera menu that the camera shows now (design 2.5). */
+  get #cameraChoice(): CameraChoice {
+    if (this.#cameraMode === 'free') {
+      return { kind: 'free' };
+    }
+    return this.#seatView === null
+      ? { kind: 'director' }
+      : { kind: 'seat', seat: this.#seatView };
   }
 
   /** Cinematic or Free (design 2.5). */
@@ -860,7 +900,13 @@ export class App {
   #showSeats(piece: Piece): void {
     const { seats, soloist } = piece.score;
     const counts = playerCounts(piece.plan.players, seats.length);
-    this.#ui.seatList.show(seatRows(seats, counts, soloist));
+    const rows = seatRows(seats, counts, soloist);
+    this.#ui.seatList.show(rows);
+    this.#ui.video.showSeats(
+      rows.flatMap((row, seat) =>
+        piece.shots.seatViews?.[seat] ? [{ seat, name: row.name, animals: row.animals }] : [],
+      ),
+    );
   }
 
   /**
@@ -964,7 +1010,17 @@ export class App {
         // The shots fill the letterbox of the aspect 21:9 in each viewport. With reduced motion,
         // each shot holds its first camera, and each cut is hard (2.5).
         const view = { aspect: CINEMA_ASPECT, still: this.#scene.reducedMotion };
-        shot = cameraAt(piece.shots, this.#songTime, transport, view, this.#shotCamera);
+        const seatPlan = this.#seatView === null ? null : seatViewPlan(piece.shots, this.#seatView);
+        // The held view of a seat shows also before the first play (the camera menu, 2.5).
+        shot = seatPlan
+          ? cameraAt(
+              seatPlan,
+              this.#songTime,
+              { ...transport, changedAtWall: transport.changedAtWall ?? 0 },
+              view,
+              this.#shotCamera,
+            )
+          : cameraAt(piece.shots, this.#songTime, transport, view, this.#shotCamera);
       }
     }
     this.#followTier(wallTime);
@@ -1085,6 +1141,7 @@ export class App {
       held: this.#message !== null || ui.creditsDialog.open,
     });
     ui.showPanels(shown.panels);
+    ui.video.showCamera(this.#cameraChoice);
     ui.bar.update({
       playLabel: ended ? 'Play again' : playLabel(status),
       pieceShown: piece !== null,

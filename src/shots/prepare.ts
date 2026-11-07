@@ -2867,11 +2867,71 @@ function* planShotsSteps(
     trace.attempt = null;
   }
   const shots = planner.planned.map((p) => p.shot);
+  // The held view of each seat for the camera menu (design 2.5): a section shot of the seat,
+  // planned with no shot before it, so that no rule of the cuts refuses its camera.
+  planner.planned.length = 0;
+  planner.lastAzimuth.clear();
+  planner.cut = 0;
+  const window = musicIn(music, 0, SHOT_TIMES.choiceWindowSec);
+  const seatViews: (Shot | null)[] = score.seats.map(() => null);
+  for (const seat of planner.staged) {
+    yield;
+    const view = (kind: 'section' | 'solo'): Framing | null =>
+      framingOf(
+        planner,
+        {
+          kind,
+          id: `view ${seat}`,
+          group: null,
+          side: null,
+          seats: [seat],
+          part: null,
+          score: 0,
+          entering: [],
+          tier: TIERS.other,
+        },
+        window,
+      );
+    const framing = view('section') ?? view('solo');
+    if (framing) {
+      seatViews[seat] = {
+        kind: 'section',
+        startSec: -Infinity,
+        endSec: Infinity,
+        moveEndSec: Math.max(score.durationSec, SHOT_TIMES.minSec),
+        blendSec: 0,
+        seats: framing.seats,
+        part: framing.part,
+        target: framing.target,
+        halfHeight: framing.halfHeight,
+        composition: framing.composition,
+        from: framing.from,
+        to: framing.to,
+      };
+    }
+  }
   return {
     stageSide: layout.stageSide,
     shots,
     starts: Float64Array.from(shots, (s) => s.startSec),
+    seatViews,
   };
+}
+
+/**
+ * Gives the plan of the held view of one seat (design 2.5): its one shot from
+ * `ShotPlan.seatViews`, for `cameraAt()`.
+ *
+ * @param plan The shots of the score.
+ * @param seat The seat.
+ * @returns The plan, or `null` for a seat with no view.
+ */
+export function seatViewPlan(plan: ShotPlan, seat: number): ShotPlan | null {
+  const shot = plan.seatViews?.[seat];
+  if (!shot) {
+    return null;
+  }
+  return { stageSide: plan.stageSide, shots: [shot], starts: Float64Array.of(shot.startSec) };
 }
 
 /**

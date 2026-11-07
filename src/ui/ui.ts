@@ -20,6 +20,8 @@ import { ModalDialog } from './modal-dialog.ts';
 import { SeatList } from './seat-list.ts';
 import { Settings } from './settings.ts';
 import { Title } from './title.ts';
+import { VideoPanel } from './video-panel.ts';
+import type { CameraChoice } from './video-panel.ts';
 import { Tooltips } from './tooltip.ts';
 
 /** The time of the fade of the stage before a build, in milliseconds, as in `ui.css`. */
@@ -41,6 +43,7 @@ interface UiActions extends BarActions {
   readonly onQuality: (quality: QualitySetting) => void;
   /** A click on a button of the setting "Frame rate". */
   readonly onFrameRate: (frameRate: FrameRateSetting) => void;
+  readonly onCameraChoice: (choice: CameraChoice) => void;
   /** A click on "Try again" in the message of a failure. */
   readonly onRetry: () => void;
   /** A click on the close button of the message, or the Escape key in it. */
@@ -63,6 +66,7 @@ export class Ui {
   readonly demoList: DemoList;
   readonly seatList: SeatList;
   readonly settings: Settings;
+  readonly video: VideoPanel;
   readonly credits = new Credits(licensesUrl(import.meta.env.BASE_URL));
   /** The modal dialog that holds the credits (design 2.8). */
   readonly creditsDialog: ModalDialog;
@@ -139,6 +143,8 @@ export class Ui {
       this.drawer.focusTab('seats');
     });
     this.drawer.addTab('seats', 'Seats', this.seatList.element);
+    this.video = new VideoPanel(actions.onCameraChoice);
+    this.drawer.addTab('video', 'Video', this.video.element);
     this.settings = new Settings(actions.onSectionSize, actions.onQuality, actions.onFrameRate);
     // The link "Credits" is a button, because it opens a dialog and goes to no page (design 2.8).
     this.creditsDialog = new ModalDialog(

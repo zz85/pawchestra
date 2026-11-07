@@ -87,6 +87,13 @@ export interface ShotPlan {
   readonly shots: readonly Shot[];
   /** The `startSec` of each shot, for the search by time. */
   readonly starts: Float64Array;
+  /**
+   * The held view of each seat, by seat index, for the camera menu of the app (design 2.5): a
+   * section shot of all players of the seat from the song start to the song end. `null` for a
+   * seat with no players on the stage, or with no clear camera. A plan that the app does not
+   * make, such as a plan of a test, has none.
+   */
+  readonly seatViews?: readonly (Shot | null)[];
 }
 
 /** The camera of one frame. */
