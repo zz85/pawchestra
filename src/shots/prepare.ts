@@ -18,6 +18,7 @@ import {
   prepareClearance,
   prepareSightLines,
   segmentClear,
+  segmentCrossesBox,
   sightsClear,
   targetLineClear,
 } from './clearance.ts';
@@ -58,7 +59,13 @@ import {
   sideSubject,
   soloSubject,
 } from './subjects.ts';
-import type { SectionGroup, StageSide, StageSubjects, Subject } from './subjects.ts';
+import type {
+  SectionGroup,
+  StageSide,
+  StageSubjects,
+  Subject,
+  SubjectFace,
+} from './subjects.ts';
 import type {
   AttemptTrace,
   CameraRefusal,
@@ -477,8 +484,13 @@ const SHOT_KEYS = {
   conductorBack: { fov: 30, offset: [0, 8], elevation: 19, pushIn: 0.95 },
   /** Views 03 and 04 of `scene.png`: one side of the stage, from the front of that side and low. */
   side: { fov: 30, offset: [0, 12], elevation: 11, pushIn: 0.95, arc: 6 },
-  section: { fov: 30, offset: [8, 22], elevation: 11, backRise: 8, pushIn: 0.92, arc: 6 },
-  solo: { fov: 24, offset: [20, 40], elevation: 9, backRise: 10, pushIn: 0.9, arc: 4 },
+  /**
+   * The section and the solo shots look down more than the side views: the wedges of the strings
+   * and the rows of the winds stand close, and a low camera showed the subject behind the heads
+   * and the instruments of its neighbors.
+   */
+  section: { fov: 30, offset: [8, 22], elevation: 17, backRise: 8, pushIn: 0.92, arc: 6 },
+  solo: { fov: 24, offset: [20, 40], elevation: 18, backRise: 10, pushIn: 0.9, arc: 4 },
 } as const;
 
 /**
@@ -757,8 +769,46 @@ export function keyPosition(
 /** A refusal of the tests of the camera of a move. */
 type MoveRefusal = Extract<
   KeptRefusal,
-  'beamEdge' | 'distance' | 'beamSide' | 'camera' | 'sight' | 'line'
+  'beamEdge' | 'distance' | 'beamSide' | 'camera' | 'sight' | 'line' | 'face'
 >;
+
+/**
+ * The share of the subject players whose own instrument may hide their eyes in a close shot
+ * (design 5.6): none, at each sample of the move. A quarter of a section let the bell of the tuba
+ * cover the face of the rhino in a side view of the brass.
+ */
+const HIDDEN_FACES = 0;
+
+/** The distance from the eyes at which the line of the face test starts, in meters. */
+const FACE_START = 0.03;
+
+/**
+ * Counts the subject players whose own instrument hides their eyes from a camera: the line from
+ * the eyes to the camera crosses a box of the instrument (design 5.6).
+ *
+ * @param faces The faces of the subject players.
+ * @param camera The camera.
+ * @returns The count.
+ */
+function hiddenFaces(faces: readonly SubjectFace[], camera: Vec3): number {
+  let hidden = 0;
+  for (const { eyes, shield } of faces) {
+    const length = Math.hypot(camera[0] - eyes[0], camera[1] - eyes[1], camera[2] - eyes[2]);
+    const k = length > 0 ? FACE_START / length : 0;
+    const segment = {
+      ax: eyes[0] + (camera[0] - eyes[0]) * k,
+      ay: eyes[1] + (camera[1] - eyes[1]) * k,
+      az: eyes[2] + (camera[2] - eyes[2]) * k,
+      bx: camera[0],
+      by: camera[1],
+      bz: camera[2],
+    };
+    if (shield.some((box) => segmentCrossesBox(box, segment))) {
+      hidden++;
+    }
+  }
+  return hidden;
+}
 
 /**
  * Tests if a move keeps its camera clear (design 5.6) at the samples of the move, at the aspect of
@@ -818,6 +868,10 @@ function moveRefusal(
       !sightsClear(clearance, sights, camera)
     ) {
       return 'sight';
+    }
+    const { faces } = move.subject;
+    if (hiddenFaces(faces, camera) > Math.floor(faces.length * HIDDEN_FACES)) {
+      return 'face';
     }
   }
   for (const i of LINE_INDICES) {

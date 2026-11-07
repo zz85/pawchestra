@@ -1,6 +1,8 @@
 import { CONDUCTOR } from '../models/cast.ts';
 import type { PlayingSection } from '../models/cast.ts';
-import { playerFootprint } from '../models/footprint.ts';
+import { footprintOf, placeFootprint, playerFootprint } from '../models/footprint.ts';
+import type { PlacedBox } from '../models/footprint.ts';
+import type { Bounds } from '../models/bounds.ts';
 import { placePoint } from '../models/instruments/hold.ts';
 import type { ConductorPlace, PlayerPlace, SceneLayout } from '../models/layout.ts';
 import type { ModelCache } from '../models/model-cache.ts';
@@ -143,6 +145,87 @@ interface SubjectPlayer {
   readonly outline: readonly Vec3[];
   /** The height of the top of the head of the player with no ears, in meters. */
   readonly top: number;
+  /** The eyes of the player and the boxes of its own instrument, for the face test. */
+  readonly face: SubjectFace;
+}
+
+/**
+ * The face of a subject player for the face test of a close shot (design 5.6): the middle of its
+ * eyes, and the boxes of its own instrument, which must not hide them. The line of sight to the
+ * head skips each box of its owner, because a box of the head band holds the head, so the bell of
+ * a tuba in front of the face passed it.
+ */
+export interface SubjectFace {
+  readonly eyes: Vec3;
+  readonly shield: readonly PlacedBox[];
+}
+
+/** The height of one band of the boxes of an instrument for the face test, in meters. */
+const SHIELD_BAND = 0.04;
+
+/** The boxes of the instrument of each player model, in the axes of the model. */
+const shields = new WeakMap<PlayerModel, readonly Bounds[]>();
+
+/**
+ * Gives the boxes of the instrument of a player model in its bind pose: one box for each band of
+ * {@link SHIELD_BAND} of height, so that a box of a horizontal tube stays thin.
+ *
+ * @param model The player model.
+ * @returns The boxes.
+ */
+function shieldOf(model: PlayerModel): readonly Bounds[] {
+  const known = shields.get(model);
+  if (known) {
+    return known;
+  }
+  const bone = boneIndex('instrument');
+  const { positions, bones } = model.mesh;
+  const bands = new Map<number, { min: [number, number, number]; max: [number, number, number] }>();
+  for (let t = 0; t < positions.length / 9; t++) {
+    if (bones[t * 3] !== bone) {
+      continue;
+    }
+    // Each triangle goes into the band of its middle with all its corners, and each box fills its
+    // band, so that the boxes of a tube or a bell join with no gap between the bands.
+    const middle =
+      ((positions[t * 9 + 1] ?? 0) + (positions[t * 9 + 4] ?? 0) + (positions[t * 9 + 7] ?? 0)) / 3;
+    const key = Math.floor(middle / SHIELD_BAND);
+    for (let v = 0; v < 3; v++) {
+      const x = positions[t * 9 + v * 3] ?? 0;
+      const y = positions[t * 9 + v * 3 + 1] ?? 0;
+      const z = positions[t * 9 + v * 3 + 2] ?? 0;
+      const box = bands.get(key) ?? {
+        min: [x, key * SHIELD_BAND, z],
+        max: [x, (key + 1) * SHIELD_BAND, z],
+      };
+      box.min = [Math.min(box.min[0], x), Math.min(box.min[1], y), Math.min(box.min[2], z)];
+      box.max = [Math.max(box.max[0], x), Math.max(box.max[1], y), Math.max(box.max[2], z)];
+      bands.set(key, box);
+    }
+  }
+  const boxes = [...bands.values()].map((b): Bounds => ({ min: b.min, max: b.max }));
+  shields.set(model, boxes);
+  return boxes;
+}
+
+/**
+ * Gives the face of a player on the stage ({@link SubjectFace}).
+ *
+ * @param model The player model.
+ * @param place The place of the player.
+ * @returns The face.
+ */
+function faceOf(model: PlayerModel, place: PlayerPlace): SubjectFace {
+  const eye = (name: 'eyeL' | 'eyeR'): Vec3 =>
+    model.skeleton.positions[boneIndex(name)] ?? model.body.headCenter;
+  const [l, r] = [eye('eyeL'), eye('eyeR')];
+  const middle: Vec3 = [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2, (l[2] + r[2]) / 2];
+  const boxes = shieldOf(model);
+  return {
+    eyes: onStage(middle, place),
+    shield:
+      boxes.length > 0 ? placeFootprint(footprintOf(boxes), place.position, place.facing) : [],
+  };
 }
 
 /** The players of one seat. */
@@ -231,6 +314,8 @@ export interface Subject {
    * another player under them on the screen does not cover a singer (design 5.6).
    */
   readonly floor: readonly Vec3[];
+  /** The faces of the subject players, for the face test of a close shot (design 5.6). */
+  readonly faces: readonly SubjectFace[];
   /**
    * The points in the stage plane whose spread across the view sets the width of the frame
    * (design 5.6): the outline of the subject players, or the middle of the sphere of a side view
@@ -671,6 +756,7 @@ export function prepareSubjects(
           },
           outline,
           top,
+          face: faceOf(model, place),
         };
       }),
     };
@@ -840,8 +926,9 @@ function headsOf(players: readonly SubjectPlayer[]): Vec3 {
 function extentOf(
   players: readonly SubjectPlayer[],
   target: Vec3,
-): Pick<Subject, 'outline' | 'reach' | 'tops' | 'lows'> {
+): Pick<Subject, 'outline' | 'reach' | 'tops' | 'lows' | 'faces'> {
   return {
+    faces: players.map((p) => p.face),
     outline: hullOf(players.flatMap((p) => p.outline)),
     reach: 0,
     tops: players.map((p): Vec3 => [p.sights.head[0], p.top, p.sights.head[2]]),
@@ -994,6 +1081,7 @@ export function conductorCloseSubject(conductor: ConductorSubjects): Subject {
     focus: head,
     outside: null,
     floor: [],
+    faces: [],
     outline: conductor.outline,
     reach: 0,
     tops: [[head[0], conductor.top, head[2]]],
@@ -1047,6 +1135,7 @@ export function conductorBackSubject(
     focus: target,
     outside: null,
     floor: [],
+    faces: [],
     outline: [target],
     reach: SUBJECT_SIZES.conductorBackRadius * subjects.stageSide,
     tops: [],

@@ -686,6 +686,8 @@ the beam fade of Free mode starts there (4.5).
   concert hall. The wanted camera of each kind stands at `CAMERA_LOWER` of the height above the
   stage top that its nominal elevation gives (`SHOT_KEYS`, `WIDE_VARIANTS`). Free mode and its
   default view keep `DEFAULT_ELEVATION`.
+- The section and solo shots have a nominal elevation of 17° and 18°. The rows of a dense layout
+  stand near each other, and a higher camera shows the subject apart from the players behind it.
 - A close camera first tries the wanted elevation with each azimuth of the grid (the low band).
   Only then it rises in steps up to the tops of `KEY_SEARCH.bands`, because a low camera sees
   more heads in the foreground. Each candidate gets the low band and the first band before a
@@ -788,6 +790,11 @@ copy these numbers of the design:
   the stage top.
 - A camera stays on one side of the beam cone for a full shot, because a crossing darkens the
   image at once.
+- The instrument of a subject player does not cover its eyes. `shieldOf()` makes boxes of the
+  instrument in bands of 4 cm of height (`SHIELD_BAND`). At each sample of the move, the segment
+  from 3 cm in front of the eyes to the camera crosses none of these boxes (`HIDDEN_FACES` is 0),
+  for each player of the subject. A solo shot tests its principal player only. The refusal is
+  `face`.
 
 **The dirty frame.** A low close camera sees the heads of the rows in front of its subject. As
 the shoulder of an over-the-shoulder shot (`camera-technique.md`), a near head or a near box of

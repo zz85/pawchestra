@@ -18,6 +18,7 @@ import type { ShotKind, ShotPlan } from './types.ts';
  * - `sight`: a camera with no clear line to the head, the hands, or the instrument.
  * - `line`: no clear line to the target between the samples of the move.
  * - `object`: another large object in the foreground.
+ * - `face`: the own instrument of a subject player hides its eyes.
  */
 export type CameraRefusal =
   | 'axis'
@@ -32,7 +33,8 @@ export type CameraRefusal =
   | 'camera'
   | 'sight'
   | 'line'
-  | 'object';
+  | 'object'
+  | 'face';
 
 /**
  * A refusal that the planner keeps for each camera of a subject, because it does not depend on

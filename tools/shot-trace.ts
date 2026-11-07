@@ -158,6 +158,7 @@ export const REFUSAL_TEXTS: Readonly<Record<CameraRefusal, string>> = {
   sight: 'blocked sight line',
   line: 'blocked line to the target',
   object: 'object in the foreground',
+  face: 'own instrument over the eyes',
 };
 
 /** The text of each rule of the choice that drops a candidate, as the tool prints it. */
