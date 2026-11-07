@@ -697,6 +697,36 @@ export function buildRisers(levels: readonly RiserLevel[], podium: Vec3): MeshDa
 }
 
 /**
+ * The box that a small wind player stands on (design 4.5, props): a wooden box, wider than a
+ * chair seat, so that the feet and the tail on its top stay on it. The player stands on the
+ * middle of its top and faces -z, and the box reaches further back, under the tail.
+ */
+export const STANDING_BOX = { width: 0.5, depth: 0.6, back: 0.1, rim: 0.03 } as const;
+
+/**
+ * Builds the box that a player stands on ({@link STANDING_BOX}) in the color of the chairs: a body
+ * and a top that reaches a little past it.
+ *
+ * @param height The height of its top above the floor, in meters.
+ * @returns The mesh data, with all vertices on bone 0.
+ */
+export function buildStandingBox(height: number): MeshData {
+  const { width, depth, back, rim } = STANDING_BOX;
+  const builder = new MeshBuilder();
+  addBox(
+    builder,
+    centeredBox([0, (height - rim) / 2, back], [width, height - rim, depth]),
+    SCENE_COLORS.chair,
+  );
+  addBox(
+    builder,
+    centeredBox([0, height - rim / 2, back], [width + 0.02, rim, depth + 0.02]),
+    SCENE_COLORS.chair,
+  );
+  return builder.build();
+}
+
+/**
  * Builds the static props of a layout as one mesh: the seat of each player, each music stand,
  * and the choir risers (design 4.4). Each kind of seat at each height and depth and each stand
  * at each desk height is built one time.
@@ -727,6 +757,14 @@ export function buildSceneProps(layout: SceneLayout): MeshData {
     const seat = seats.get(key);
     if (seat) {
       builder.addMesh(seat, place(player.position, player.facing));
+    }
+    const lift = player.position[1];
+    if (support !== 'riser' && lift > 1e-6) {
+      const boxKey = `box ${lift}`;
+      const box = seats.get(boxKey) ?? buildStandingBox(lift);
+      seats.set(boxKey, box);
+      const [x, , z] = player.position;
+      builder.addMesh(box, place([x, 0, z], player.facing));
     }
   }
   const stands = new Map<number, MeshData>();

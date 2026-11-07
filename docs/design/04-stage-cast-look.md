@@ -639,7 +639,10 @@ its rest is the bind.
   The smaller head moves the mouth back, so the trombone hold of the panda puts the
   right elbow further out and the rest place further forward (5.2, 5.3).
 - The mouse, the beaver, and the monkey have no chair (`noChair`). Each keeps its seated pose at
-  the seat height of its legs, with its feet on the floor. The monkey has short legs under a
+  the seat height of its legs, with its feet on the floor. The mouse of the oboes and the beaver
+  of the bassoons are small, and the rows in front hid them, so in a row each stands on a wooden
+  box (`STANDING_BOXES` of `models/layout-scene.ts`, `STANDING_BOX` of `models/props.ts`). The box
+  reaches back under the tail. A soloist keeps the floor. The monkey has short legs under a
   large head, so its feet stand under its hips and its trunk leans forward with the head level.
   Its center of mass thus stays over its soles.
 - The hippo, the elephant, the badger, the rhino, and the penguin stand to play, in the standing

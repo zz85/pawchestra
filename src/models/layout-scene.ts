@@ -221,6 +221,17 @@ const STAND_USE = {
   choir: 'none',
 } as const satisfies Readonly<Record<PlayingSection, StandUse>>;
 
+/**
+ * The sections whose players stand on a box, with the height of its top in meters (design 4.5,
+ * props). The mouse of the oboes and the beaver of the bassoons stand with no chair, and they are
+ * small, so the rows in front hid them. On the box, their heads come up to the heads of the
+ * seated players around them.
+ */
+export const STANDING_BOXES: Partial<Readonly<Record<PlayingSection, number>>> = {
+  oboe: 0.45,
+  bassoon: 0.4,
+};
+
 /** One player that the layout places. */
 interface Member {
   /** The index of the player in the cast and in `SceneLayout.players`. */
@@ -244,6 +255,11 @@ interface Member {
   readonly standDistance: number;
   /** True for a violinist. The first violins sit to the left of 0° in row 0. */
   readonly violin: boolean;
+  /**
+   * The height of the box that the player stands on, in meters ({@link STANDING_BOXES}), or 0
+   * for the floor.
+   */
+  readonly lift: number;
 }
 
 /** A player or a stand with its place, relative to the podium center. */
@@ -278,7 +294,7 @@ const CENTER: Vec3 = [0, 0, 0];
  */
 function placePlayer(member: Member, angle: number, radius: number, height = 0): PlacedPlayer {
   const spot = seatAt(CENTER, angle, radius);
-  const position: Vec3 = [spot.position[0], height, spot.position[2]];
+  const position: Vec3 = [spot.position[0], height + member.lift, spot.position[2]];
   const { species, instrument, seatIndex, player } = member.cast;
   return {
     index: member.index,
@@ -982,11 +998,15 @@ function memberOf(
   const model = models.get(cast.species, cast.instrument, cast.kettles, cast.support);
   const footprint = turned ? quarterTurn(playerFootprint(model)) : playerFootprint(model);
   const stand = STAND_USE[section];
-  const eye = Math.min(
-    ...(['eyeL', 'eyeR'] as const).map(
-      (bone) => model.skeleton.positions[boneIndex(bone)]?.[1] ?? Infinity,
-    ),
-  );
+  // A soloist keeps the floor: it stands at the front, clear of the rows.
+  const lift = group === 'soloist' ? 0 : (STANDING_BOXES[section] ?? 0);
+  const eye =
+    lift +
+    Math.min(
+      ...(['eyeL', 'eyeR'] as const).map(
+        (bone) => model.skeleton.positions[boneIndex(bone)]?.[1] ?? Infinity,
+      ),
+    );
   return {
     index,
     cast,
@@ -1004,6 +1024,7 @@ function memberOf(
     standDistance:
       stand === 'own' ? ownStandDistance(footprint, standDeskHeight([eye])) : STAND_DISTANCE,
     violin: section === 'violin',
+    lift,
   };
 }
 
