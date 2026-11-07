@@ -148,19 +148,51 @@ type DeskSection = 'violin-1' | 'violin-2' | 'viola' | 'cello';
  */
 type RowGroup = PlayingSection | DeskSection | `${DeskSection}-b` | 'soloist' | 'vocal-soloists';
 
+/** The place of a group in its row: left of 0°, around 0°, or right of 0°. */
+type RowSide = -1 | 0 | 1;
+
 /**
- * The rows of the orchestra, from the front, with their sections from left to right (design
- * 4.5, seat geometry). It is the American seating with the contrabasses in a line at the back.
- * A keyboard of the orchestra (the celesta, the harpsichord, or a piano that is not the soloist)
- * sits at the left of the harp, behind the violins, as in a professional orchestra.
+ * The string sections in their wedges (design 4.5, seat geometry), as the seating plan of a
+ * modern orchestra: from the left edge to the winds, the first violins and the other violins, and
+ * from the winds to the right edge, the violas, the cellos, and the contrabasses. Each section
+ * spreads over the string rows from the front, desk by desk, so that it keeps one wedge from the
+ * front to the back. The contrabasses fill their wedge from the back.
  */
-const ROWS: readonly (readonly RowGroup[])[] = [
-  ['violin-1', 'violin-2', 'viola', 'cello'],
-  ['violin-1-b', 'violin-2-b', 'viola-b', 'cello-b'],
-  ['piano', 'harp', 'flute', 'oboe'],
-  ['horn', 'clarinet', 'bassoon', 'trumpet'],
-  ['percussion', 'contrabass', 'timpani', 'trombone', 'tuba'],
+const STRING_WEDGES = {
+  left: ['violin-1', 'violin-2'],
+  right: ['viola', 'cello', 'contrabass'],
+} as const;
+
+/** The string wedge of a player. */
+type StringWedge = (typeof STRING_WEDGES)['left' | 'right'][number];
+
+/** The string players that one string row holds on its fuller side, at most. */
+const STRING_ROW_PLAYERS = 7;
+
+/** The most string rows. */
+const MAX_STRING_ROWS = 4;
+
+/**
+ * The winds in the middle of each row from the front (design 4.5, seat geometry): no wind in the
+ * row of the conductor, then the flutes and the oboes, the clarinets and the bassoons, and the
+ * horns. The rows of the strings and of the winds are the same rows.
+ */
+const MIDDLE_ROWS: readonly (readonly RowGroup[])[] = [
+  [],
+  ['flute', 'oboe'],
+  ['clarinet', 'bassoon'],
+  ['horn'],
 ];
+
+/**
+ * The last row (design 4.5, seat geometry): the keyboard, the harp, and the percussion on the
+ * left, the timpani and the trumpets in the middle, and the trombones and the tuba on the right.
+ */
+const BACK_ROW = {
+  left: ['piano', 'harp', 'percussion'],
+  center: ['timpani', 'trumpet'],
+  right: ['trombone', 'tuba'],
+} as const satisfies Readonly<Record<'left' | 'center' | 'right', readonly RowGroup[]>>;
 
 /**
  * The order of the players in the arc of a chamber group, from left to right (design 4.5, seat
@@ -193,9 +225,6 @@ const CHAMBER_ORDER: readonly RowGroup[] = [
   'tuba',
   'choir',
 ];
-
-/** Rows 0 and 1 put the violins to the left of 0° and the other strings to the right. */
-const SPLIT_ROWS = 2;
 
 /** The players of a desk: two players share one stand (design 4.5, seat geometry). */
 const DESK_SIZE = 2;
@@ -253,8 +282,6 @@ interface Member {
   readonly eye: number;
   /** The distance of its own stand in front of the player, in meters. */
   readonly standDistance: number;
-  /** True for a violinist. The first violins sit to the left of 0° in row 0. */
-  readonly violin: boolean;
   /**
    * The height of the box that the player stands on, in meters ({@link STANDING_BOXES}), or 0
    * for the floor.
@@ -507,37 +534,38 @@ interface Arrangement {
 }
 
 /**
- * Places the players of a row on its arc (design 4.5, seat geometry). In a split row, 0° is
- * between the violins and the other sections, and each side spans at most 80°. Else the row is
- * centered on 0°, and it spans at most 160°.
+ * Places the players of a row on its arc (design 4.5, seat geometry). With sides, the middle of
+ * the players around 0° is at 0°, or, with no such players, 0° is between the players of the
+ * left and of the right, and each side spans at most 80°. With no sides, the row is centered on
+ * 0°, and it spans at most 160°.
  *
  * @param members The players from left to right. There is at least one.
- * @param split True for rows 0 and 1.
+ * @param sides The side of each player in its row, or `null` for a row with no sides.
  * @param radius The radius at which the spacing is measured.
  * @param halfSpan The largest angle of one side: 80°, or 60° for the arc of a chamber group.
  * @returns The arrangement.
  */
 function arrange(
   members: readonly Member[],
-  split: boolean,
+  sides: readonly RowSide[] | null,
   radius: number,
   halfSpan = HALF_SPAN,
 ): Arrangement {
-  return runAll(arrangeSteps(members, split, radius, halfSpan));
+  return runAll(arrangeSteps(members, sides, radius, halfSpan));
 }
 
 /**
  * Places the players of a row on its arc as {@link arrange} does, in steps (design 7.2).
  *
  * @param members The players from left to right. There is at least one.
- * @param split True for rows 0 and 1.
+ * @param sides The side of each player in its row, or `null` for a row with no sides.
  * @param radius The radius at which the spacing is measured.
  * @param halfSpan The largest angle of one side.
  * @returns The steps, which return the arrangement.
  */
 function* arrangeSteps(
   members: readonly Member[],
-  split: boolean,
+  sides: readonly RowSide[] | null,
   radius: number,
   halfSpan = HALF_SPAN,
 ): Steps<Arrangement> {
@@ -550,15 +578,23 @@ function* arrangeSteps(
   const last = members.at(-1);
   const from = first ? -leftEnd(first) : 0;
   const to = last ? (at.at(-1) ?? 0) + rightEnd(last) : 0;
-  if (!split) {
+  if (!sides) {
     return { at, zero: (from + to) / 2, radius: (to - from) / (2 * halfSpan) };
   }
-  const lastViolin = members.findLastIndex((m) => m.violin);
+  const firstMiddle = sides.indexOf(0);
+  const lastMiddle = sides.lastIndexOf(0);
+  const lastLeft = sides.lastIndexOf(-1);
   let zero = from;
-  if (lastViolin === members.length - 1) {
+  const middleFirst = members[firstMiddle];
+  const middleLast = members[lastMiddle];
+  if (middleFirst && middleLast) {
+    zero =
+      ((at[firstMiddle] ?? 0) - leftEnd(middleFirst) + (at[lastMiddle] ?? 0) + rightEnd(middleLast)) /
+      2;
+  } else if (lastLeft === members.length - 1) {
     zero = to;
-  } else if (lastViolin >= 0) {
-    zero = ((at[lastViolin] ?? 0) + (at[lastViolin + 1] ?? 0)) / 2;
+  } else if (lastLeft >= 0) {
+    zero = ((at[lastLeft] ?? 0) + (at[lastLeft + 1] ?? 0)) / 2;
   }
   return { at, zero, radius: Math.max(zero - from, to - zero) / halfSpan };
 }
@@ -619,7 +655,9 @@ interface FittedRow {
   readonly members: readonly Member[];
   /** The index of the row in {@link ROWS}. */
   readonly row: number;
-  /** True for rows 0 and 1, which have the violins left of 0° and the other strings right of it. */
+  /** The side of each player in its row. */
+  readonly sides: readonly RowSide[];
+  /** True for a row with no players around 0°: its two sides meet at 0°. */
   readonly split: boolean;
   readonly radius: number;
   readonly angles: readonly number[];
@@ -693,6 +731,7 @@ function rowClear(row: RowPlacement, clearance: RowClearance): boolean {
  * front (design 4.5, seat geometry).
  *
  * @param members The players of the row from left to right.
+ * @param sides The side of each player in its row.
  * @param row The index of the row in {@link ROWS}.
  * @param smallest The radius of the previous row plus 1.2 m.
  * @param clearance The items on the stage, all in front of the row.
@@ -700,15 +739,16 @@ function rowClear(row: RowPlacement, clearance: RowClearance): boolean {
  */
 function* fitRowSteps(
   members: readonly Member[],
+  sides: readonly RowSide[],
   row: number,
   smallest: number,
   clearance: RowClearance,
 ): Steps<FittedRow> {
-  const split = row < SPLIT_ROWS;
+  const split = !sides.includes(0);
   let radius = smallest;
   for (;;) {
     yield;
-    const arrangement = yield* arrangeSteps(members, split, radius);
+    const arrangement = yield* arrangeSteps(members, sides, radius);
     if (arrangement.radius > radius) {
       radius = Math.max(arrangement.radius, radius + CLEAR_STEP);
       continue;
@@ -716,7 +756,7 @@ function* fitRowSteps(
     const angles = rowAngles(arrangement, radius);
     const placement = placeRow(members, angles, radius);
     if (rowClear(placement, clearance)) {
-      return { members, row, split, radius, angles, placement };
+      return { members, row, sides, split, radius, angles, placement };
     }
     radius += CLEAR_STEP;
   }
@@ -799,7 +839,7 @@ function fitChoir(
   let radius = smallest;
   for (;;) {
     const levelRadius = (k: number): number => radius + RISER.depth * k;
-    const arrangements = groups.map((group, k) => arrange(group, false, levelRadius(k)));
+    const arrangements = groups.map((group, k) => arrange(group, null, levelRadius(k)));
     if (arrangements.some((a, k) => a.radius > levelRadius(k))) {
       radius += CLEAR_STEP;
       continue;
@@ -818,7 +858,7 @@ function fitChoir(
       (group, k) =>
         placeRow(
           group,
-          rowAngles(arrangements[k] ?? arrange(group, false, 1), levelRadius(k)),
+          rowAngles(arrangements[k] ?? arrange(group, null, 1), levelRadius(k)),
           levelRadius(k),
           RISER.base + RISER.rise * k,
         ).players,
@@ -1023,7 +1063,6 @@ function memberOf(
     eye,
     standDistance:
       stand === 'own' ? ownStandDistance(footprint, standDeskHeight([eye])) : STAND_DISTANCE,
-    violin: section === 'violin',
     lift,
   };
 }
@@ -1172,7 +1211,7 @@ function placeSoloist(member: Member): PlacedPlayer & { readonly front: number }
 function fitArc(members: readonly Member[]): RowPlacement {
   let radius: number = CHAMBER.radius;
   for (;;) {
-    const arrangement = arrange(members, false, radius, CHAMBER.halfSpan);
+    const arrangement = arrange(members, null, radius, CHAMBER.halfSpan);
     if (arrangement.radius <= radius) {
       return placeRow(members, rowAngles(arrangement, radius), radius);
     }
@@ -1412,7 +1451,7 @@ function rowOnStage(row: RowPlacement, stage: StageSize): boolean {
  * on that side, and the arc from 0° to the innermost player, grows by a factor up to 1.6 m. An
  * arc that is already longer stays. With no player at 0°, the innermost arc of a centered row
  * grows up to half of 1.6 m, because the innermost player of the other side shares it. The
- * innermost arc of rows 0 and 1 is the gap of the conductor, and it grows with no limit.
+ * innermost arc of a row with no players around 0° is the gap of the conductor, and it grows with no limit.
  *
  * @param row The row.
  * @param side -1 for the players left of 0°, 1 for the players right of 0°.
@@ -1481,107 +1520,11 @@ function* spreadSideSteps(
   return row;
 }
 
-/** The row of the desks after the first desk of each string seat. */
-const BACK_DESK_ROW = 1;
-
-/** The step of the blend of the back desks toward their wedges. */
-const WEDGE_STEP = 0.1;
-
-/**
- * Calculates the angles that put the back desks of one side of row 1 behind the first desks of
- * their seats in row 0. The players of one seat keep their packed arcs around the middle angle
- * of the first desk. Then a pass from 0° to the outside keeps each packed arc between two
- * neighbors, and the packed arc from 0° to the innermost player, as a minimum.
- *
- * @param packed Row 1 before the spread.
- * @param front Row 0 after the spread.
- * @param side -1 for the players left of 0°, 1 for the players right of 0°.
- * @returns The angle of each player. The players of the other side keep their packed angles.
- */
-function wedgeAngles(packed: FittedRow, front: FittedRow, side: -1 | 1): number[] {
-  const middle = (angles: readonly number[], at: (i: number) => boolean, seat: number): number => {
-    const own = angles.filter((_, i) => at(i) && packed.members[i]?.cast.seatIndex === seat);
-    return own.reduce((sum, a) => sum + a, 0) / own.length;
-  };
-  const frontDesk = (seat: number): number => {
-    const own = front.angles.filter((_, i) => {
-      const cast = front.members[i]?.cast;
-      return cast?.seatIndex === seat && cast.player < DESK_SIZE;
-    });
-    return own.reduce((sum, a) => sum + a, 0) / own.length;
-  };
-  const onSide = (i: number): boolean => side * (packed.angles[i] ?? 0) > 0;
-  const next = packed.angles.map((angle, i) => {
-    if (!onSide(i)) {
-      return angle;
-    }
-    const seat = packed.members[i]?.cast.seatIndex ?? -1;
-    const target = frontDesk(seat);
-    return Number.isFinite(target) ? target + angle - middle(packed.angles, onSide, seat) : angle;
-  });
-  const order = packed.angles
-    .map((angle, i) => ({ out: side * angle, i }))
-    .filter((p) => p.out > 0)
-    .toSorted((a, b) => a.out - b.out);
-  let inner = 0;
-  let innerPacked = 0;
-  for (const { out, i } of order) {
-    const at = Math.max(side * (next[i] ?? 0), inner + out - innerPacked);
-    next[i] = side * at;
-    inner = at;
-    innerPacked = out;
-  }
-  return next;
-}
-
-/**
- * Moves the back desks of one side of row 1 toward the first desks of their seats in row 0, as
- * the wedges of the strings of a professional orchestra (design 4.5, seat geometry). The row
- * takes the largest blend, in steps of 0.1, between the spread angles and the angles of
- * {@link wedgeAngles} that keeps each seat within ±90°, each box 0.3 m from the edges, and each
- * footprint its gaps from the other items ({@link rowClear}).
- *
- * @param spread Row 1 after the spread.
- * @param packed Row 1 before the spread.
- * @param front Row 0 after the spread.
- * @param side -1 for the players left of 0°, 1 for the players right of 0°.
- * @param clearance The other items on the stage.
- * @param stage The stage side and the front distance.
- * @returns The row with the new angles, or the spread row if no blend fits.
- */
-function* wedgeSideSteps(
-  spread: FittedRow,
-  packed: FittedRow,
-  front: FittedRow,
-  side: -1 | 1,
-  clearance: RowClearance,
-  stage: StageSize,
-): Steps<FittedRow> {
-  const target = wedgeAngles(packed, front, side);
-  const steps = Math.round(1 / WEDGE_STEP);
-  for (let k = steps; k > 0; k--) {
-    yield;
-    const blend = k / steps;
-    const next = spread.angles.map((angle, i) =>
-      side * (packed.angles[i] ?? 0) > 0 ? angle + blend * ((target[i] ?? angle) - angle) : angle,
-    );
-    if (next.some((a) => Math.abs(a) > SPREAD_LIMITS.maxAngle + 1e-9)) {
-      continue;
-    }
-    const placement = placeRow(spread.members, next, spread.radius);
-    if (rowOnStage(placement, stage) && rowClear(placement, clearance)) {
-      return { ...spread, angles: next, placement };
-    }
-  }
-  return spread;
-}
-
 /**
  * Spreads each instrumental row inside the stage, from the front (design 4.5, seat geometry). The
  * packed rows end at ±43° to ±74°, so the front corners of the stage stayed empty. The left side
- * and the right side of a row each get their own factor. Rows 0 and 1 keep the violins left of
- * 0° and the other strings right of it. After its spread, row 1 moves its back desks toward their
- * first desks ({@link wedgeSideSteps}). The stage side does not change.
+ * and the right side of a row each get their own factor. A row keeps its left side left of 0°
+ * and its right side right of it. The stage side does not change.
  *
  * @param rows The packed rows, from the front.
  * @param fixed The obstacles that do not move: the podium with the conductor, the soloist, the
@@ -1609,15 +1552,93 @@ function* spreadRowsSteps(
       playersBehind: behind.flatMap((r) => r.placement.players.map((p) => p.obstacle)),
     };
     const left = yield* spreadSideSteps(row, -1, clearance, stage);
-    let next = yield* spreadSideSteps(left, 1, clearance, stage);
-    const front = done.find((r) => r.row === 0);
-    if (row.row === BACK_DESK_ROW && front) {
-      next = yield* wedgeSideSteps(next, row, front, -1, clearance, stage);
-      next = yield* wedgeSideSteps(next, row, front, 1, clearance, stage);
-    }
+    const next = yield* spreadSideSteps(left, 1, clearance, stage);
     done.push(next);
   }
   return done;
+}
+
+/**
+ * Gives the string wedge of a row group, or `null` for a group that is not a string section.
+ *
+ * @param group The row group.
+ * @returns The wedge.
+ */
+function wedgeOf(group: RowGroup): StringWedge | null {
+  const wedge = group.replace(/-b$/u, '');
+  return [...STRING_WEDGES.left, ...STRING_WEDGES.right].find((w) => w === wedge) ?? null;
+}
+
+/**
+ * Divides the players of one string wedge over the string rows, desk by desk (design 4.5, seat
+ * geometry): the two players of a desk share a row, and the desks spread evenly from the front, or
+ * from the back for the contrabasses.
+ *
+ * @param players The players of the wedge, in the order of the cast.
+ * @param rowCount The number of string rows.
+ * @param fromBack True to fill the rows from the back.
+ * @returns The players of each row, from the front.
+ */
+function wedgeRows(players: readonly Member[], rowCount: number, fromBack: boolean): Member[][] {
+  const desks: Member[][] = [];
+  for (const member of players) {
+    const last = desks.at(-1)?.[0];
+    const sameDesk =
+      last &&
+      last.cast.seatIndex === member.cast.seatIndex &&
+      Math.floor(last.cast.player / DESK_SIZE) === Math.floor(member.cast.player / DESK_SIZE);
+    if (sameDesk) {
+      desks.at(-1)?.push(member);
+    } else {
+      desks.push([member]);
+    }
+  }
+  const rows: Member[][] = Array.from({ length: rowCount }, () => []);
+  const used = Math.min(rowCount, desks.length);
+  desks.forEach((desk, d) => {
+    const k = Math.floor((d * used) / desks.length);
+    rows[fromBack ? rowCount - 1 - k : k]?.push(...desk);
+  });
+  return rows;
+}
+
+/**
+ * Gives the rows of an orchestra from the front, each with its players from left to right and the
+ * side of each player (design 4.5, seat geometry): the string rows, with the string wedges on the
+ * sides and {@link MIDDLE_ROWS} in the middle, and then {@link BACK_ROW}.
+ *
+ * @param members The players.
+ * @param groups The row group of each player, by its index.
+ * @returns The rows.
+ */
+function orchestraRows(
+  members: readonly Member[],
+  groups: readonly RowGroup[],
+): { readonly member: Member; readonly side: RowSide }[][] {
+  const inGroup = (group: RowGroup): Member[] => members.filter((m) => groups[m.index] === group);
+  const inWedge = (wedge: StringWedge): Member[] =>
+    members.filter((m) => wedgeOf(groups[m.index] ?? 'choir') === wedge);
+  const count = (wedges: readonly StringWedge[]): number =>
+    wedges.reduce((sum, wedge) => sum + inWedge(wedge).length, 0);
+  const fuller = Math.max(count(STRING_WEDGES.left), count(STRING_WEDGES.right));
+  const stringRows = Math.min(MAX_STRING_ROWS, Math.ceil(fuller / STRING_ROW_PLAYERS));
+  const split = (wedges: readonly StringWedge[]): Member[][][] =>
+    wedges.map((wedge) => wedgeRows(inWedge(wedge), stringRows, wedge === 'contrabass'));
+  const left = split(STRING_WEDGES.left);
+  const right = split(STRING_WEDGES.right);
+  const rowCount = Math.max(stringRows, MIDDLE_ROWS.length);
+  const tag = (side: RowSide) => (member: Member) => ({ member, side });
+  const rows = Array.from({ length: rowCount }, (...[, k]) => [
+    ...left.flatMap((wedge) => wedge[k] ?? []).map(tag(-1)),
+    ...(MIDDLE_ROWS[k] ?? []).flatMap(inGroup).map(tag(0)),
+    ...right.flatMap((wedge) => wedge[k] ?? []).map(tag(1)),
+  ]);
+  rows.push([
+    ...BACK_ROW.left.flatMap(inGroup).map(tag(-1)),
+    ...BACK_ROW.center.flatMap(inGroup).map(tag(0)),
+    ...BACK_ROW.right.flatMap(inGroup).map(tag(1)),
+  ]);
+  return rows;
 }
 
 /**
@@ -1721,12 +1742,13 @@ export function* layoutSceneSteps(score: Score, models: ModelCache): Steps<Scene
 
   const rows: FittedRow[] = [];
   let radius = FIRST_ROW_RADIUS - ROW_STEP;
-  for (const [n, rowGroups] of ROWS.entries()) {
-    const row = rowGroups.flatMap(inGroup);
+  for (const [n, parts] of orchestraRows(members, groups).entries()) {
+    const row = parts.map((part) => part.member);
     if (row.length === 0) {
       continue;
     }
-    const fit = yield* fitRowSteps(row, n, radius + ROW_STEP, {
+    const sides = parts.map((part) => part.side);
+    const fit = yield* fitRowSteps(row, sides, n, radius + ROW_STEP, {
       placed: [...fixed, ...rows.flatMap((r) => obstaclesOfRow(r.placement))],
       pianosInFront: [...soloPianos, ...rows.flatMap((r) => pianosOfRow(r.placement))],
       playersBehind: [],

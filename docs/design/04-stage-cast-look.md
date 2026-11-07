@@ -38,26 +38,32 @@ These product choices apply to each area:
 The sections go into arcs in the standard order, with no gaps between the used sections. The
 stage size follows the player count. Thus a string quartet sits close together on a small stage.
 
-The standard order is the American seating of a professional orchestra, with the contrabasses
-in a line at the back, as the Vienna Philharmonic seats them. The diagram shows it from above.
+The standard order is the seating plan of a modern orchestra that the user gave: the strings
+in wedges on both sides, the woodwinds in the middle, and the brass and the percussion at the
+back. The diagram shows it from above.
 
 ```text
                           back of the stage
 ┌──────────────────────────────────────────────────────────────────┐
 │                        choir (on risers)                         │
-│ row 4:  percussion  contrabasses  timpani  trombones  tuba       │
-│ row 3:        horns   clarinets | bassoons   trumpets            │
-│ row 2:  keyboard  harp   flutes | oboes                          │
-│ row 1: 1st violins  2nd violins | violas  cellos  (other desks)  │
-│ row 0: 1st violins  2nd violins | violas  cellos  (first desks)  │
+│ last: keyboard harp percussion | timpani trumpets | trombones tuba│
+│ row 3:  violins          |       horns        | cellos  basses   │
+│ row 2:  violins          | clarinets bassoons | violas cellos    │
+│ row 1:  1st vl  2nd vl   |   flutes  oboes    | violas cellos    │
+│ row 0:  1st vl  2nd vl   |                    | violas cellos    │
 │     soloist (piano)        [bear on the podium]                  │
 └──────────────────────────────────────────────────────────────────┘
                         front of the stage
 ```
 
-- The strings sit in wedges. The first desk of each string seat (its players 0 and 1) sits in
-  the front row, and its other desks sit in the row behind it. The rows spread to the side edges,
-  as in the reference image (4.5, seat geometry).
+- The strings sit in wedges (`STRING_WEDGES` of `models/layout-scene.ts`): from the left edge,
+  the first violins, then the other violins; from the winds to the right edge, the violas, the
+  cellos, and the contrabasses. Each wedge spreads over the string rows from the front, desk by
+  desk, so the two players of a desk share a row and a stand. The contrabasses fill their wedge
+  from the back. The count of string rows follows the fuller side (`STRING_ROW_PLAYERS`), up to
+  `MAX_STRING_ROWS`. The rows spread to the side edges (4.5, seat geometry).
+- The woodwinds and the horns sit in the middle of the string rows (`MIDDLE_ROWS`), with no wind
+  in the row of the conductor. The last row (`BACK_ROW`) holds the rest.
 - A keyboard of the orchestra (a celesta, a harpsichord, or an organ that is not the soloist of
   3.8) sits at the left of the harp, as the celesta of a professional orchestra. With no harp and
   no woodwinds, it sits in the middle behind the strings, as a continuo harpsichord.
@@ -1018,16 +1024,15 @@ negative angles are on the left. A seat at the angle `a` and the radius `r` is a
 - A seated player uses at least `SEATED_ARC`, and neighbors keep `FOOTPRINT_GAP` between their
   footprints. Two string players share one stand (`STAND_DISTANCE`). Each wind player has a
   stand.
-- Rows 0 and 1 hold the strings: the violins left of 0°, the violas and the cellos right of it,
-  so no string player sits behind the conductor. The other rows are centered on 0° and span at
-  most 160°.
+- Each row has a left side, a middle, and a right side. The middle of the players of the middle is
+  at 0°. A row with no middle has its left side left of 0° and its right side right of it, so no
+  string player sits behind the conductor. Each side spans at most 80°.
 - Each row stands at least `ROW_STEP` behind the row in front, and then moves back until its
   footprints clear the items in front. A player behind a piano case keeps `PIANO_REACH_GAP`,
   because it reaches toward the case in play.
 - The choir risers stand behind the last row, each level higher, so the back row hides no singer.
 - After the stage size, each row spreads to the side edges (`SPREAD_LIMITS`), because the packed
-  rows left the front corners empty. Then row 1 moves its back desks toward their first desks, as
-  the wedges of a professional orchestra.
+  rows left the front corners empty.
 
 ```typescript
 /** The limits of the spread of a row. */
