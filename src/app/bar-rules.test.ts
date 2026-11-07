@@ -34,7 +34,7 @@ describe('barShows (design 2.3, 2.8)', () => {
 
 describe('the speed menu (design 2.4, 2.8)', () => {
   it('goes from 0.5x to 1.5x with the texts of the spec', () => {
-    expect(SPEEDS.map(speedText)).toEqual(['0.5×', '0.75×', '1.0×', '1.25×', '1.5×']);
+    expect(SPEEDS.map(speedText)).toEqual(['0.5×', '0.75×', '1.0×', '1.1×', '1.15×', '1.2×', '1.25×', '1.5×']);
   });
 });
 

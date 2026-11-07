@@ -80,8 +80,8 @@ The UI has the style of a video player. The theme is dark only, because the scen
 
 ## 2.4 Play, load, and keyboard
 
-- Play waits until all samples of the file are loaded and decoded. The speed goes from 0.5× to
-  1.5×.
+- Play waits until all samples of the file are loaded and decoded. The speed menu has 0.5×, 0.75×,
+  1.0×, 1.1×, 1.15×, 1.2×, 1.25× and 1.5×.
 - Space plays and pauses. The left and the right arrows seek 5 s, and Home goes to the start. The
   up and the down arrows move the volume slider by 5 of 100, and turn the mute off, as the slider
   does. C toggles the cinematic camera, M the mute, and F the full screen. Escape closes the

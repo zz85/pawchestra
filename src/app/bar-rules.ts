@@ -5,7 +5,7 @@
 export const BAR_HIDE_SEC = 3;
 
 /** The speeds of the speed menu of the bar (design 2.4, 2.8). */
-export const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5] as const;
+export const SPEEDS = [0.5, 0.75, 1, 1.1, 1.15, 1.2, 1.25, 1.5] as const;
 
 /** One speed of the speed menu. */
 export type Speed = (typeof SPEEDS)[number];
