@@ -6,6 +6,7 @@ import type { PosePlan } from '../pose/plan.ts';
 import { createScenePose, poseAt } from '../pose/pose-at.ts';
 import type { ScenePoseBuffer } from '../pose/pose-at.ts';
 import type { SeatAudibility } from '../pose/types.ts';
+import type { ExportProgress } from './video-export.ts';
 import type { PreparedLayout, StageScene } from '../scene/stage-scene.ts';
 import type { Steps } from '../score/steps.ts';
 import { stageMix } from '../score/stage-mix.ts';
@@ -18,7 +19,7 @@ import type { Score, SectionSize } from '../score/types.ts';
 import { focusKindOf } from '../ui/dom.ts';
 import { nextShadeLevel } from '../ui/title-shade.ts';
 import { Ui } from '../ui/ui.ts';
-import type { CameraChoice } from '../ui/video-panel.ts';
+import type { CameraChoice, ExportForm } from '../ui/video-panel.ts';
 import { playWithSilentSwitch, warmAudioOutput } from './audio-session.ts';
 import { BackdropProbe } from './backdrop-probe.ts';
 import { DEFAULT_SPEED, DEFAULT_VOLUME, uiShown, volumeGain } from './bar-rules.ts';
@@ -65,8 +66,39 @@ import {
 } from './settings.ts';
 import type { FrameRateSetting, QualitySetting, TierWatch } from './settings.ts';
 import { songTimeValue, wholeSeconds } from './time-text.ts';
-import { STOPPED, followSongTime, seekPlayState, setPlaying, startPlay } from './transport.ts';
+import {
+  NOT_STARTED,
+  STOPPED,
+  changeTransport,
+  followSongTime,
+  seekPlayState,
+  setPlaying,
+  startPlay,
+} from './transport.ts';
 import type { PlayState } from './transport.ts';
+
+/**
+ * The wall clock seconds from the start of the lifts of a video export to its first frame
+ * (design 2.9): the players hold their instruments up at the first frame.
+ */
+const EXPORT_LEAD_SEC = 2;
+
+/** The options of a video export (design 2.9), from the tab "Video". */
+export interface ExportRequest {
+  readonly width: number;
+  readonly height: number;
+  readonly fps: number;
+  /** The song time of the first frame, in seconds. */
+  readonly startSec: number;
+  /** The length of the music in the video, in seconds, or `null` to the song end. */
+  readonly lengthSec: number | null;
+  /** The seconds of picture and sound after the music, for the hall to ring out. */
+  readonly tailSec: number;
+  /** True for the shots in the full frame, false for the letterbox of 21:9. */
+  readonly fullFrame: boolean;
+  /** True for a video with sound. */
+  readonly sound: boolean;
+}
 
 /** The time between two updates of the frame rate counter of the settings, in seconds. */
 const FPS_COUNTER_SEC = 0.5;
@@ -278,6 +310,10 @@ export class App {
    * `null` (the camera menu, design 2.5). Each other change of the camera ends it.
    */
   #seatView: number | null = null;
+  /** True while a video export renders its frames: the page draws no frame (design 2.9). */
+  #exporting = false;
+  /** The cancel of the running video export, or `null` with none (design 2.9). */
+  #exportAbort: AbortController | null = null;
   /** The camera of the shot of the last frame, which `cameraAt()` writes. */
   readonly #shotCamera = createCameraPose();
   /** The phone layout of design 2.8, which moves the frame above the sheet. */
@@ -364,6 +400,12 @@ export class App {
         },
         onCameraChoice: (choice) => {
           this.#chooseCamera(choice);
+        },
+        onExport: (form) => {
+          this.#startExport(form).catch(reportError);
+        },
+        onCancelExport: () => {
+          this.#exportAbort?.abort();
         },
         onRetry: () => {
           this.#message = null;
@@ -604,6 +646,196 @@ export class App {
       this.#changeCamera('toggle');
     }
     this.#seatView = choice.kind === 'seat' ? choice.seat : null;
+  }
+
+  /** The song time of the last frame, and the song length, for the tab "Video" (design 2.9). */
+  get songPosition(): { readonly songSec: number; readonly durationSec: number } | null {
+    const piece = this.#piece;
+    return piece ? { songSec: this.#songTime, durationSec: piece.score.durationSec } : null;
+  }
+
+  /**
+   * Renders the current piece as a video file offline (design 2.9): the sound with the hall, and
+   * each frame at a fixed time step with the camera of the camera menu. The page pauses, and it
+   * draws no frame of its own until the end.
+   *
+   * @param request The options.
+   * @param onProgress Gets the progress of each part.
+   * @param signal The signal of a cancel.
+   * @returns The MP4 file.
+   * @throws Error with no piece, or when the browser cannot encode the video.
+   */
+  async exportVideo(
+    request: ExportRequest,
+    onProgress: ExportProgress,
+    signal: AbortSignal,
+  ): Promise<Blob> {
+    const piece = this.#piece;
+    if (!piece) {
+      throw new Error('Choose a piece first.');
+    }
+    if (this.#state.transport.playing) {
+      this.#pause();
+    }
+    const durationSec = piece.score.durationSec;
+    const startSec = Math.max(0, Math.min(request.startSec, Math.max(0, durationSec - 1)));
+    const endSec =
+      request.lengthSec === null ? durationSec : Math.min(durationSec, startSec + request.lengthSec);
+    const lengthSec = endSec - startSec + request.tailSec;
+    const { width, height, fps, fullFrame } = request;
+    const exporter = await import('./video-export.ts');
+    const sound = request.sound
+      ? await exporter.renderSound({
+          score: piece.score,
+          mix: piece.mix,
+          gainDb: pieceGainDb(piece.file, this.#mix),
+          mixName: this.#mix,
+          audible: piece.audible,
+          startSec,
+          lengthSec,
+          baseUrl: new URL(import.meta.env.BASE_URL, window.location.href),
+          onProgress,
+          signal,
+        })
+      : null;
+
+    // The players hold their instruments up at the first frame, and lower them at the song end.
+    const play = changeTransport(
+      NOT_STARTED,
+      true,
+      startSec - EXPORT_LEAD_SEC,
+      startSec,
+      EXPORT_LEAD_SEC,
+    );
+    const stop = changeTransport(play, false, durationSec, durationSec);
+    const audibility = piece.audible.map((audible): SeatAudibility | undefined =>
+      audible ? undefined : { audible, changedAtWall: -Infinity, before: null },
+    );
+    const choice = this.#cameraChoice;
+    const shots =
+      choice.kind === 'seat' ? (seatViewPlan(piece.shots, choice.seat) ?? piece.shots) : piece.shots;
+    const view = { aspect: fullFrame ? width / height : CINEMA_ASPECT, still: false };
+    const clockMs = performance.now() + 60_000;
+    const renderFrame = (frame: number): void => {
+      const t = startSec + frame / fps;
+      const transport = t >= durationSec ? stop : play;
+      this.#scene.pose(poseAt(piece.plan, t, t, transport, audibility, piece.poses));
+      this.#scene.solo(piece.flags);
+      const shot =
+        choice.kind === 'free' ? null : cameraAt(shots, t, transport, view, this.#shotCamera);
+      this.#scene.render(shot, { right: 0, lift: 0 }, null, {
+        nowMs: clockMs + (frame * 1000) / fps,
+        fullFrame,
+      });
+    };
+
+    this.#exporting = true;
+    try {
+      this.#scene.resizeExact(width, height);
+      // The first render takes each glide of the view to its end, from the frame of the page.
+      renderFrame(0);
+      return await exporter.encodeVideo({
+        width,
+        height,
+        fps,
+        frames: Math.max(1, Math.round(lengthSec * fps)),
+        canvas: this.#canvas,
+        renderFrame,
+        sound,
+        onProgress,
+        signal,
+      });
+    } finally {
+      this.#exporting = false;
+      this.#scene.endOwnClock();
+      this.#scene.resize(this.#canvas.clientWidth, this.#canvas.clientHeight, window.devicePixelRatio);
+    }
+  }
+
+  /**
+   * Runs a video export from the tab "Video", shows its progress there, and downloads the file
+   * at its end (design 2.9).
+   *
+   * @param form The choices of the panel.
+   */
+  async #startExport(form: ExportForm): Promise<void> {
+    const piece = this.#piece;
+    const panel = this.#ui.video;
+    if (this.#exportAbort) {
+      return;
+    }
+    if (!piece) {
+      panel.showExport(false, 'Choose a piece first.', null);
+      return;
+    }
+    const { exportSupported } = await import('./video-export.ts');
+    if (!exportSupported()) {
+      panel.showExport(false, 'This browser has no WebCodecs encoder. Try Chrome or Edge.', null);
+      return;
+    }
+    const abort = new AbortController();
+    this.#exportAbort = abort;
+    const startSec = form.fromHere ? this.#songTime : 0;
+    const shares = form.sound
+      ? { samples: [0, 0.05], sound: [0.05, 0.3], picture: [0.3, 0.99], file: [0.99, 1] }
+      : { samples: [0, 0], sound: [0, 0], picture: [0, 0.99], file: [0.99, 1] };
+    const begun = performance.now();
+    let pictureAt: number | null = null;
+    const onProgress: ExportProgress = (stage, done, total) => {
+      const [from = 0, to = 1] = shares[stage];
+      const part = total > 0 ? done / total : 1;
+      let text = 'Writing the file';
+      if (stage === 'samples') {
+        text = `Loading the samples: ${done} of ${total} files`;
+      } else if (stage === 'sound') {
+        text = `Rendering the sound: ${Math.round(part * 100)} %`;
+      } else if (stage === 'picture') {
+        pictureAt ??= performance.now();
+        const rate = (done / Math.max(1, performance.now() - pictureAt)) * 1000;
+        const left = rate > 0 ? Math.round((total - done) / rate) : 0;
+        text = `Rendering frame ${done} of ${total}: ${rate.toFixed(1)} frames a second, ${Math.floor(left / 60)} min ${left % 60} s left`;
+      }
+      panel.showExport(true, text, from + (to - from) * part);
+    };
+    panel.showExport(true, 'Starting the export', 0);
+    try {
+      const blob = await this.exportVideo(
+        {
+          width: form.width,
+          height: form.height,
+          fps: form.fps,
+          startSec,
+          lengthSec: form.lengthSec,
+          tailSec: form.tailSec,
+          fullFrame: form.fullFrame,
+          sound: form.sound,
+        },
+        onProgress,
+        abort.signal,
+      );
+      const name = `${piece.title.title.replaceAll(/[^\w\- ]+/gu, '').trim().replaceAll(/\s+/gu, '_') || 'pawchestra'}_${form.height}p${form.fps}.mp4`;
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = name;
+      link.click();
+      setTimeout(() => {
+        URL.revokeObjectURL(link.href);
+      }, 60_000);
+      const minutes = (performance.now() - begun) / 60_000;
+      panel.showExport(
+        false,
+        `Saved ${name} (${(blob.size / 1e6).toFixed(1)} MB) in ${minutes.toFixed(1)} min.`,
+        null,
+      );
+    } catch (error) {
+      const cancelled = error instanceof DOMException && error.name === 'AbortError';
+      panel.showExport(false, cancelled ? 'The export was cancelled.' : String(error), null);
+      if (!cancelled) {
+        console.error(error);
+      }
+    } finally {
+      this.#exportAbort = null;
+    }
   }
 
   /** The choice of the camera menu that the camera shows now (design 2.5). */
@@ -970,6 +1202,9 @@ export class App {
    * @returns True if the frame draws.
    */
   frameDue(nowMs: number): boolean {
+    if (this.#exporting) {
+      return false;
+    }
     const due = frameDue(nowMs, this.#lastDrawMs, this.#frameRate);
     if (due === null) {
       return false;

@@ -401,3 +401,20 @@ instant with reduced motion. Each text keeps the contrast 4.5:1 of WCAG AA over 
   mode, the focus or the pointer on the bar, the drawer, or the link of the title keeps the bar
   and the drawer, and an open drawer does not (2.3). The title does not hide. The hidden controls
   stay in the focus order.
+
+## 2.9 Video export
+
+The tab "Video" of the drawer exports the current piece as an MP4 file (`app/video-export.ts`,
+which loads only at an export). The options are the resolution, the frame rate, the start (the
+song start or the current position), the duration, the tail after the music, the picture (full
+frame, or the letterbox of 21:9), and the sound. The camera of the camera menu (2.5) films it.
+
+- **Offline.** Each frame renders at a fixed time step with its own clock
+  (`RenderOptions.nowMs`), so the video is smooth however slow the GPU is. The poses and the shots
+  are stateless (5.1, 5.6), so a frame needs only its song time. The page pauses and draws no
+  frame of its own during the export.
+- **Sound.** The `SynthEngine` renders the clip on the main thread with the banks of a decode
+  Worker, and the output chain of the `Player` with the hall renders it in an
+  `OfflineAudioContext`. The mute and the solo buttons apply.
+- **File.** WebCodecs encodes H.264, and AAC or, with no AAC encoder (Chromium), Opus.
+  `mp4-muxer` writes a fragmented MP4 from the start to the end, so the file needs no second pass.

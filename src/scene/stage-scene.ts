@@ -330,6 +330,17 @@ export function lightEffects(scene: Object3D): Object3D[] {
  * shader programs again. The players show the bind pose until {@link StageScene.pose} gives them
  * the poses of a frame.
  */
+/** The options of one render of {@link StageScene.render}. */
+export interface RenderOptions {
+  /**
+   * The time of the frame, in milliseconds, for the effects and the glides: the time of a frame of
+   * a video export (design 2.9). The time of the page when it is not given.
+   */
+  readonly nowMs?: number;
+  /** True to show the shot of Cinematic mode in the full canvas, with no letterbox. */
+  readonly fullFrame?: boolean;
+}
+
 /**
  * Renders the scene pass of a frame (design 4.5). The depth pass of the beam renders the shadow
  * map of the frame (`BeamDepth.render`), so the scene pass after it does not render the map again.
@@ -352,6 +363,10 @@ export function renderScenePass(
 }
 
 export class StageScene {
+  /** The time that the frames add to `performance.now()`, after a video export (`endOwnClock()`). */
+  #clockShiftMs = 0;
+  /** The time of the last render, in milliseconds. */
+  #lastNowMs = 0;
   readonly #canvas: HTMLCanvasElement;
   readonly #renderer: WebGLRenderer;
   /**
@@ -840,6 +855,32 @@ export class StageScene {
     this.#view?.camera.resize(width, height);
   }
 
+  /**
+   * Sets the size of the drawing buffer to exactly these pixels, with the pixel ratio 1, for the
+   * frames of a video export (design 2.9). `resize()` gives the size of the page again.
+   *
+   * @param width The width, in pixels.
+   * @param height The height, in pixels.
+   */
+  resizeExact(width: number, height: number): void {
+    this.#width = width;
+    this.#height = height;
+    this.#renderer.setPixelRatio(1);
+    this.#renderer.setSize(width, height, false);
+    this.#post?.setSize(width, height);
+    this.#beamDepth.setSize(width, height);
+    this.#view?.camera.resize(width, height);
+  }
+
+  /**
+   * Continues the clock of the effects and the glides after the frames of a video export, which
+   * had their own times (`RenderOptions.nowMs`): the next frames take on from the last time, so
+   * that no glide runs back.
+   */
+  endOwnClock(): void {
+    this.#clockShiftMs = Math.max(0, this.#lastNowMs - performance.now());
+  }
+
   /** True if the user prefers reduced motion (design 2.5). */
   get reducedMotion(): boolean {
     return this.#reducedMotion;
@@ -968,11 +1009,19 @@ export class StageScene {
    * @param ring The box of the load ring of the play button of the first screen, in CSS pixels,
    *   or `null` while it does not show. The stage shrinks until it is clear of it.
    */
-  render(shot: CameraPose | null, cover: FrameCover, ring: ScreenBox | null): void {
+  render(
+    shot: CameraPose | null,
+    cover: FrameCover,
+    ring: ScreenBox | null,
+    options: RenderOptions = {},
+  ): void {
     const view = this.#view;
     if (!view) {
       return;
     }
+    const nowMs = options.nowMs ?? performance.now() + this.#clockShiftMs;
+    this.#lastNowMs = nowMs;
+    const letterboxed = shot !== null && options.fullFrame !== true;
     let beam: number;
     let light: number;
     let spot = 0;
@@ -988,11 +1037,11 @@ export class StageScene {
       light = freeShotLight(view.stageSide, this.aspect, [x, y, z]);
     }
     this.#lightShot(view, light, spot);
-    const postView = this.#followLetterbox(shot !== null, performance.now());
-    view.camera.frameTo(cover, ring, performance.now(), postView.cinema);
-    const foot = this.#followAim(view, performance.now());
+    const postView = this.#followLetterbox(letterboxed, nowMs);
+    view.camera.frameTo(cover, ring, nowMs, postView.cinema);
+    const foot = this.#followAim(view, nowMs);
     const camera = view.camera.camera;
-    const timeSec = effectTime(performance.now(), this.#reducedMotion);
+    const timeSec = effectTime(nowMs, this.#reducedMotion);
     const beamGroup = view.lights.children.find((child) => child instanceof Group);
     const depthPass = beamGroup instanceof Group;
     if (depthPass) {
@@ -1010,7 +1059,7 @@ export class StageScene {
       });
     }
     setHallCamera(view.hall, view.stageSide, camera.position, this.#beamDepth.size[1]);
-    const focus = this.#focusOf(view, shot !== null, performance.now());
+    const focus = this.#focusOf(view, shot !== null, nowMs);
     if (!depthPass) {
       this.#holdPose(view);
     }

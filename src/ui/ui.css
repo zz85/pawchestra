@@ -1247,6 +1247,51 @@ body.is-building #stage {
   overflow-y: auto;
 }
 
+.export-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.export-field {
+  display: grid;
+  gap: 4px;
+}
+
+.export-check {
+  font-size: 13px;
+}
+
+.export-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.panel-button {
+  flex: 1 1 auto;
+  min-height: var(--target-compact);
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.panel-button.is-secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.panel-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.export-bar {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
 /* The "Playback" group shows only on a phone, with four controls of the bar (design 2.8). */
 .playback {
   display: none;

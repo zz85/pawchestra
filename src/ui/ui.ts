@@ -21,7 +21,7 @@ import { SeatList } from './seat-list.ts';
 import { Settings } from './settings.ts';
 import { Title } from './title.ts';
 import { VideoPanel } from './video-panel.ts';
-import type { CameraChoice } from './video-panel.ts';
+import type { CameraChoice, ExportForm } from './video-panel.ts';
 import { Tooltips } from './tooltip.ts';
 
 /** The time of the fade of the stage before a build, in milliseconds, as in `ui.css`. */
@@ -44,6 +44,8 @@ interface UiActions extends BarActions {
   /** A click on a button of the setting "Frame rate". */
   readonly onFrameRate: (frameRate: FrameRateSetting) => void;
   readonly onCameraChoice: (choice: CameraChoice) => void;
+  readonly onExport: (form: ExportForm) => void;
+  readonly onCancelExport: () => void;
   /** A click on "Try again" in the message of a failure. */
   readonly onRetry: () => void;
   /** A click on the close button of the message, or the Escape key in it. */
@@ -143,7 +145,11 @@ export class Ui {
       this.drawer.focusTab('seats');
     });
     this.drawer.addTab('seats', 'Seats', this.seatList.element);
-    this.video = new VideoPanel(actions.onCameraChoice);
+    this.video = new VideoPanel({
+      onCamera: actions.onCameraChoice,
+      onExport: actions.onExport,
+      onCancelExport: actions.onCancelExport,
+    });
     this.drawer.addTab('video', 'Video', this.video.element);
     this.settings = new Settings(actions.onSectionSize, actions.onQuality, actions.onFrameRate);
     // The link "Credits" is a button, because it opens a dialog and goes to no page (design 2.8).
