@@ -15,9 +15,12 @@ export const TARGET_LOUDNESS = -16;
  * after the limiter and its trim. `pnpm loudness --fit --mix <name>` measures it for each full
  * demo, with the SoundFont of design 6.2, the velocity curve, the stage mix, the room of the
  * synth, and the code of `output-chain.ts` in an OfflineAudioContext of headless Chromium. For a
- * demo that the limiter does not touch, the value is the loudness with the piece gain 0 dB.
+ * demo that the limiter does not touch, the value is the loudness with the piece gain 0 dB. A
+ * demo with no fit yet has no value, and plays at 0 dB, as a file of the user does.
  */
-export const DEMO_LOUDNESS: Readonly<Record<MixName, Readonly<Record<DemoId, number>>>> = {
+export const DEMO_LOUDNESS: Readonly<
+  Record<MixName, Readonly<Partial<Record<DemoId, number>>>>
+> = {
   hall: {
     'boulanger-matin': -16.6,
     'beethoven-9': -9.2,

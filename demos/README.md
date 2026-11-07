@@ -13,7 +13,8 @@ This folder holds the demo pieces of the app (design section 8).
 
 ## Sources and licenses
 
-All compositions are in the public domain. Each file also has its own license.
+All compositions but the Sibelius symphony are in the public domain. Each file but the Sibelius
+files also has its own license.
 
 | Hash id | File | Piece | Source | License | Typesetter (credit) |
 |---|---|---|---|---|---|
@@ -35,6 +36,14 @@ All compositions are in the public domain. Each file also has its own license.
 | `beethoven-5-4` | `src/beethoven-5-4.mid` | Beethoven, Symphony No. 5, Op. 67, mvt 4, with no exposition repeat | [OpenScore Orchestra](https://github.com/MarkGotham/Hauptstimme/blob/8f677853c45b74ca0afcd79677e5379c06c82354/data/Beethoven,_Ludwig_van/Symphony_No.5,_Op.67/4/Beethoven_Op.67_4.mscz), made by the OpenScore pipeline below | CC0 1.0 (score) | OpenScore |
 | `beethoven-7-4` | `src/beethoven-7-4.mid` | Beethoven, Symphony No. 7, Op. 92, mvt 4, with no exposition repeat | [OpenScore Orchestra](https://github.com/MarkGotham/Hauptstimme/blob/8f677853c45b74ca0afcd79677e5379c06c82354/data/Beethoven,_Ludwig_van/Symphony_No.7,_Op.92/4/Beethoven_Op.92_4.mscz), made by the OpenScore pipeline below | CC0 1.0 (score) | OpenScore |
 | `beethoven-6-1` | `src/beethoven-6-1.mid` | Beethoven, Symphony No. 6, Op. 68 ("Pastoral"), mvt 1, with no exposition repeat | [OpenScore Orchestra](https://github.com/MarkGotham/Hauptstimme/blob/8f677853c45b74ca0afcd79677e5379c06c82354/data/Beethoven,_Ludwig_van/Symphony_No.6,_Op.68/1/Beethoven_Op.68_1.mscz), made by the OpenScore pipeline below | CC0 1.0 (score) | OpenScore |
+| `sibelius-2-1` | `src/sibelius-2-1.mid` | Sibelius, Symphony No. 2, Op. 43, mvt 1 | The user of this checkout, file `sibelius_symphony_2_1_(c)gilbert.mid` | None given: the file says "(c) Jack Gilbert" | Jack Gilbert |
+| `sibelius-2-2` | `src/sibelius-2-2.mid` | Sibelius, Symphony No. 2, Op. 43, mvt 2 | The user of this checkout, file `sibelius_symphony_2_2_(c)gilbert.mid` | None given: the file says "(c) Jack Gilbert" | Jack Gilbert |
+| `sibelius-2-3-4` | `src/sibelius-2-3-4.mid` | Sibelius, Symphony No. 2, Op. 43, mvts 3 and 4 | The user of this checkout, file `sibelius_symphony_2_3-4_(c)gilbert.mid` | None given: the file says "(c) Jack Gilbert" | Jack Gilbert |
+
+The three Sibelius files do not follow the license rules of design 8.1. Sibelius died in 1957,
+so the symphony is in the public domain in the US and under copyright in the EU until 1 January
+2028, and the sequences of Jack Gilbert have no license. The user added them on 2026-11-07 and
+accepted this risk for a local checkout. Remove them before the site is deployed.
 
 Only the CC BY 4.0 license of `pachelbel-p37` requires a credit line and a link to the license.
 The credits panel of the app lists each source and each typesetter. For `pachelbel-p37`, it also
@@ -72,6 +81,9 @@ on 2026-10-05 and on 2026-10-30, at commit `8f677853`). Each score holds the sam
 | `src/beethoven-5-4.mid` | `241ddab0fe831ea1e14699d0030e0a52d45c23a7eaf707a0d59b66bd289c8da2` |
 | `src/beethoven-7-4.mid` | `1262d3200da80ac485c5d44d85b93dbada6a3f452f1e84a2de1c68cda93b4891` |
 | `src/beethoven-6-1.mid` | `50d66781d1b7dbe7e5a412ac37b9b89548a137bcd8498be1a96bd7ce8d34b15d` |
+| `src/sibelius-2-1.mid` | `fc81696d7e9ef2013df8f8910c0ebf5a878fa14eba5f242abb1369340a068218` |
+| `src/sibelius-2-2.mid` | `c655d6bef27161c2502435d273fb5c63b543e2d867e03cdc51d902551bbed3b6` |
+| `src/sibelius-2-3-4.mid` | `dfc192bcd76e91548d260d8f7f74b8c1421f1e75784ef97334316fa5106a32a8` |
 | `boulanger/matin-nolyrics.mscz` | `cbcca2cd6b43c0d58ba0c3f38b7e9bfbc438e1b1ec4720b6bea784e7fbcd013f` |
 
 ## Program changes

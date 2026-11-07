@@ -67,6 +67,9 @@ of 23 June 2021 add one rule: no training or test of a machine learning model.
 | 16 | `beethoven-8-4` | Beethoven, Symphony 8, mvt 4 | OpenScore | CC0 | Full orchestra |
 | 17 | `bach-bwv1047` | Bach, Brandenburg Concerto 2, mvt 1 | Mutopia 1680 | public domain | Solo trumpet, flute, oboe, violin, harpsichord |
 | 18 | `mendelssohn-op61` | Mendelssohn, A Midsummer Night's Dream, Op. 61: V | Mutopia 80 | public domain | Woodwinds and strings |
+| 19 | `sibelius-2-1` | Sibelius, Symphony No. 2, Op. 43: I | Jack Gilbert, from the user | none (see demos/README.md) | Full orchestra |
+| 20 | `sibelius-2-2` | Sibelius, Symphony No. 2, Op. 43: II | Jack Gilbert, from the user | none (see demos/README.md) | Full orchestra |
+| 21 | `sibelius-2-3-4` | Sibelius, Symphony No. 2, Op. 43: III and IV | Jack Gilbert, from the user | none (see demos/README.md) | Full orchestra |
 
 - `DEMOS` of `app/demos.ts` holds the title, the composer, and the credit line of each demo, in
   the order of `DEMO_IDS`. Demo 1 is the default demo (`DEFAULT_DEMO`, 2.2), and it is part of

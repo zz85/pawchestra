@@ -23,6 +23,9 @@ export const DEMO_IDS = [
   'beethoven-8-4',
   'bach-bwv1047',
   'mendelssohn-op61',
+  'sibelius-2-1',
+  'sibelius-2-2',
+  'sibelius-2-3-4',
 ] as const;
 
 /** The hash id of one demo (design 8.2). */
@@ -178,6 +181,24 @@ export const DEMOS = {
     composer: 'Felix Mendelssohn',
     credit: 'Score: Mutopia Project, piece 80, public domain. Typeset by Aaron Gage.',
     lengthSec: 148,
+  },
+  'sibelius-2-1': {
+    title: 'Symphony No. 2, Op. 43: I',
+    composer: 'Jean Sibelius',
+    credit: 'MIDI file sequenced by Jack Gilbert.',
+    lengthSec: 577,
+  },
+  'sibelius-2-2': {
+    title: 'Symphony No. 2, Op. 43: II',
+    composer: 'Jean Sibelius',
+    credit: 'MIDI file sequenced by Jack Gilbert.',
+    lengthSec: 823,
+  },
+  'sibelius-2-3-4': {
+    title: 'Symphony No. 2, Op. 43: III and IV',
+    composer: 'Jean Sibelius',
+    credit: 'MIDI file sequenced by Jack Gilbert.',
+    lengthSec: 1176,
   },
 } as const satisfies Readonly<Record<DemoId, DemoInfo>>;
 

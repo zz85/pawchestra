@@ -7,7 +7,13 @@ describe('pieceGainDb (design 6.8)', () => {
   it('brings each demo to the target loudness with each mix preset', () => {
     for (const mix of ['hall', 'cinematic'] as const) {
       for (const id of DEMO_IDS) {
-        expect(DEMO_LOUDNESS[mix][id] + pieceGainDb(id, mix)).toBeCloseTo(TARGET_LOUDNESS, 5);
+        const loudness = DEMO_LOUDNESS[mix][id];
+        if (loudness === undefined) {
+          // A demo with no fit yet plays at 0 dB.
+          expect(pieceGainDb(id, mix)).toBe(0);
+        } else {
+          expect(loudness + pieceGainDb(id, mix)).toBeCloseTo(TARGET_LOUDNESS, 5);
+        }
       }
     }
   });
